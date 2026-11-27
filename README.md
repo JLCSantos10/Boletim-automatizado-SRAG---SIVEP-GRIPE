@@ -289,7 +289,7 @@ Diretoria de Vigilância Epidemiológica
 
 ## 5. Como cada indicador é calculado
 
-### 5.0 Local de residência, e não de notificação
+### 5.0 Local de residência
 
 **Tudo no painel — indicadores, gráficos, tabelas, diagrama de controle, Rt, mapas e o boletim
 em Word — se refere ao local de *residência* do caso.** Não é um detalhe de implementação: é o
