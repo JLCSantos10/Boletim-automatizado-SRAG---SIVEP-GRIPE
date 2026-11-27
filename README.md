@@ -9,6 +9,7 @@ nenhum arquivo à mão**.
 | Casos | [API de Dados Abertos do SUS](https://apidadosabertos.saude.gov.br/v1) (DEMAS/MS) `[10]` |
 | População | [API do IBGE — SIDRA](https://apisidra.ibge.gov.br) `[11]` `[12]` |
 | População do DF por RA | planilha da Codeplan incluída no projeto `[13]` |
+| Malhas dos mapas | shapefiles do IBGE `[15]` e das RAs do DF `[16]`, na pasta `Mapas/` |
 | Alternativa | os seus próprios dados, enviados pelo painel |
 
 ---
@@ -60,7 +61,7 @@ RStudio instalado em `Program Files` ou em `AppData`, no Quarto e no Pandoc avul
 | RStudio | abra `app.R` e clique em **Run App** |
 | Terminal | `Rscript -e "shiny::runApp(getwd(), port = 4040, launch.browser = TRUE)"` |
 
-O painel abre em `http://127.0.0.1:4040`. Ele é uma aplicação `shiny` `[18]` rodando em R `[19]`
+O painel abre em `http://127.0.0.1:4040`. Ele é uma aplicação `shiny` `[20]` rodando em R `[21]`
 na sua própria máquina — nada é enviado para fora.
 
 > **Primeira execução:** os pacotes R são instalados automaticamente (pode levar alguns
@@ -94,6 +95,9 @@ escolher, duas coisas acontecem:
 
 1. o painel baixa todo o histórico daquela UF (veja o [passo 7](#passo-7--atualize-os-dados));
 2. a UF vira o padrão — nas próximas vezes o painel já abre nela.
+
+**A UF é a de residência**, não a de notificação — como todo território no painel. Isso muda
+números de verdade e está explicado no [item 5.0](#50-local-de-residência-e-não-de-notificação).
 
 ### Passo 3 — Escolha a abrangência
 
@@ -130,7 +134,7 @@ Os demais filtros ficam recolhidos em dois grupos:
 
 | Filtro | Para que serve |
 |---|---|
-| Tipo de vírus | mantém só os casos com detecção positiva do(s) vírus escolhido(s) |
+| Vírus respiratórios | mantém só os casos com detecção positiva do(s) vírus escolhido(s) |
 | Intervalo de anos | a série histórica da figura 1 |
 | Anos de histórico | quantos anos anteriores entram nos limiares do diagrama de controle |
 | Ano(s) epidêmico(s) | anos atípicos excluídos do cálculo dos limiares |
@@ -138,21 +142,35 @@ Os demais filtros ficam recolhidos em dois grupos:
 | Municípios no diagrama | quantas facetas no diagrama de controle por município |
 | Colunas do diagrama | largura da grade de facetas |
 
-Os filtros são combináveis e valem para **tudo**: gráficos, textos, diagrama de controle, Rt e
-o boletim em Word. São aplicados **antes** do recorte de período, para que a série histórica
-trate da mesma população mostrada nos gráficos.
+Os filtros são combináveis e valem para **tudo**: gráficos, mapas, textos, diagrama de
+controle, Rt e o boletim em Word. São aplicados **antes** do recorte de período, para que a
+série histórica trate da mesma população mostrada nos gráficos.
 
-O botão **Limpar filtros** zera o grupo Demografia e o tipo de vírus de uma vez. Se a
-combinação não deixar nenhum caso, o painel avisa em vez de mostrar gráficos vazios.
+O botão **Limpar filtros** zera o grupo Demografia e os vírus de uma vez. Se a combinação não
+deixar nenhum caso, o painel avisa em vez de mostrar gráficos vazios.
+
+**O filtro de vírus é único e comanda o painel inteiro.** A lista não é fixa: ela é montada a
+partir dos vírus que têm **ao menos uma detecção positiva por PCR** no banco carregado,
+ordenados por frequência — se o banco não tem Influenza B, Influenza B não aparece na lista. A
+contagem é feita sobre o banco inteiro, antes do recorte de período, justamente para que
+escolher um vírus não apague os outros das opções.
+
+Dois atalhos acompanham o filtro: *Todos os vírus do banco* e *Limpar vírus*. Sem nenhuma
+seleção, entram todos os casos — e as facetas do Rt usam os **4 vírus mais frequentes do
+período**, porque acima disso a leitura se perde e o cálculo fica lento. O rodapé do filtro
+diz quantos vírus existem e quantos estão selecionados; a aba Rt repete quais vírus estão
+valendo nas facetas.
 
 ### Passo 6 — Leia os gráficos
 
 Todos são **plotly**: passe o mouse para ver os valores, dê zoom, isole séries clicando na
-legenda e exporte em PNG pelo ícone da câmera. Abaixo de cada gráfico há um **texto
+legenda e exporte em PNG pelo ícone da câmera. Nos gráficos facetados, **cada cor aparece uma
+única vez na legenda** e clicar nela liga ou desliga aquela série em todas as facetas de uma
+vez. Abaixo de cada gráfico há um **texto
 interpretativo** gerado a partir dos próprios dados, pronto para copiar.
 
 As escalas, cores e eixos são os mesmos do boletim em Word: os gráficos do documento são
-feitos em `ggplot2` `[16]` e a versão interativa é uma conversão do mesmo objeto `[17]`,
+feitos em `ggplot2` `[18]` e a versão interativa é uma conversão do mesmo objeto `[19]`,
 justamente para nada se deslocar.
 
 ### Passo 7 — Atualize os dados
@@ -176,7 +194,10 @@ justamente para nada se deslocar.
 3. **Casos, incidência e nowcasting** — barras azuis com os casos, linha vermelha com a
    incidência (eixo à direita) e **linha tracejada preta** com os casos corrigidos pelo atraso
    de notificação (veja o [item 5.5](#55-nowcasting--correção-do-atraso-de-notificação)).
-4. **Resumo da situação epidemiológica** — a tabela que abre o boletim.
+4. **Distribuição espacial dos casos** — dois mapas lado a lado, **número de casos** à
+   esquerda e **incidência** à direita, na camada geográfica que você escolher (veja o
+   [item 5.7](#57-mapas-coropléticos)).
+5. **Resumo da situação epidemiológica** — a tabela que abre o boletim.
 
 ### Vírus
 
@@ -268,6 +289,53 @@ Diretoria de Vigilância Epidemiológica
 
 ## 5. Como cada indicador é calculado
 
+### 5.0 Local de residência, e não de notificação
+
+**Tudo no painel — indicadores, gráficos, tabelas, diagrama de controle, Rt, mapas e o boletim
+em Word — se refere ao local de *residência* do caso.** Não é um detalhe de implementação: é o
+que torna a incidência um número legítimo. O denominador da incidência é a população que mora
+no território; se o numerador incluísse quem mora fora, as duas pontas da fração falariam de
+populações diferentes.
+
+| Campo | Coluna no SIVEP | Observação |
+|---|---|---|
+| UF | `SG_UF_RES` | cai para `SG_UF_NOT` quando não vem preenchida |
+| Município / RA | `ID_MN_RESI` | já era de residência desde o início |
+
+**Por que isso importa, em números.** A base do DF tem 113.713 registros, dos quais 14.635
+(12,9%) são de pessoas que moram em outra UF — quase todas em Goiás (12.965), do entorno do
+Distrito Federal, que se tratam na rede do DF. Pelo critério de notificação esses casos
+entravam em tudo. Trocando para residência, no ano de 2025:
+
+| Indicador | Por notificação | Por residência |
+|---|---|---|
+| Registros após o filtro de UF | 113.713 | 99.078 |
+| Casos no período | 13.041 | 10.636 |
+| Óbitos | 268 | 238 |
+| Letalidade | 2,06% | 2,24% |
+| **Incidência /100 mil** | **402,5** | **328,3** |
+| População no denominador | 3.239.675 | 3.239.675 |
+| Territórios na lista | 481 | 31 |
+| Municípios | 130 | 1 |
+
+A linha da população é a que explica o problema. Com a abrangência em *UF inteira*, o
+denominador é sempre a população do Distrito Federal, 3.239.675 habitantes. O numerador, pelo
+critério de notificação, somava os casos de **481 territórios** — entre eles São Paulo, Rio de
+Janeiro, Fortaleza e Salvador, de gente que mora lá e foi notificada aqui. Numerador e
+denominador falavam de populações diferentes, e a incidência saía **22,6% inflada**. A
+letalidade, por sua vez, estava subestimada: 2,06% contra 2,24% reais.
+
+E a lista de territórios caía de 481 para 31 — as 31 Regiões Administrativas do DF. Os 450
+extras eram municípios de outras UFs que poluíam o seletor de territórios, o diagrama de
+controle e o mapa.
+
+**O que fica de fora.** A API publica os dados **por UF de notificação** (veja o
+[item 6.1](#61-casos-api-de-dados-abertos-do-sus)), então o contrário também existe: um
+residente do DF atendido em Goiás está na base de GO, não na do DF, e o painel não o vê. É uma
+limitação da fonte, não do painel. Quando isso acontece, o painel **avisa na tela** quantas
+notificações foram excluídas por serem de fora e lembra que o caminho inverso não é coberto; o
+boletim em Word traz a mesma nota na seção de métodos.
+
 ### 5.1 Semana epidemiológica
 
 A semana (`SE`) e o ano (`ano`) saem da **data dos primeiros sintomas** (`DT_SIN_PRI`) pelo
@@ -288,9 +356,14 @@ total da UF, quando não há filtro de município `[6]`.
 
 **Passo a passo do cálculo:**
 
-1. conta os casos de cada semana epidemiológica do período;
+1. conta os casos de cada semana epidemiológica do período, **pelo território de residência**
+   (veja o [item 5.0](#50-local-de-residência-e-não-de-notificação));
 2. busca a população do ano de referência (veja o [item 6.2](#62-população-ibge));
 3. divide e multiplica por 100.000.
+
+O passo 1 é o que mantém numerador e denominador falando da mesma população. Contar por local
+de notificação e dividir pela população residente é o erro clássico aqui, e ele infla a
+incidência de todo município que atende gente de fora.
 
 ### 5.3 Letalidade
 
@@ -385,7 +458,7 @@ dados de frequência mista. Ele **não modela atraso de notificação** e foi re
 O Rt estima quantas pessoas, em média, cada caso infecta no momento. Acima de 1, a transmissão
 está em expansão; abaixo de 1, em retração.
 
-**Método: Cori et al. (2013)** `[2]`, pelo pacote `EpiEstim` `[15]` `[8]`.
+**Método: Cori et al. (2013)** `[2]`, pelo pacote `EpiEstim` `[17]` `[8]`.
 
 **Passo a passo:**
 
@@ -430,13 +503,17 @@ Cada localidade vira uma **seção recolhível**. Ao expandir, aparecem os gráf
 
 **Controles:**
 
-| Controle | O que faz |
-|---|---|
-| Nível da localidade | define o que é uma "seção" |
-| Vírus a exibir | quais facetas aparecem dentro de cada seção (+ *Selecionar todos* / *Limpar*) |
-| Localidades | quais seções existem (+ *Selecionar todas* / *Limpar*) |
-| Facetas por linha | 1 a 4 colunas dentro da seção |
-| Calcular todas | calcula tudo de uma vez, para preencher a tabela |
+| Controle | Onde fica | O que faz |
+|---|---|---|
+| Nível da localidade | aba Rt | define o que é uma "seção" |
+| Localidades | aba Rt | quais seções existem (+ *Selecionar todas* / *Limpar*) |
+| Facetas por linha | aba Rt | 1 a 4 colunas dentro da seção |
+| Calcular todas | aba Rt | calcula tudo de uma vez, para preencher a tabela |
+| **Vírus respiratórios** | **filtro lateral** | quais facetas aparecem dentro de cada seção |
+
+O vírus **não tem controle próprio aqui**: ele vem do filtro geral, em *Estatística › Vírus
+respiratórios*, como todo o resto do painel. A aba mostra em uma linha quais vírus estão
+valendo, para não haver dúvida sobre o que está na tela.
 
 **O cálculo roda só ao expandir uma seção** — cerca de 1,5 s por localidade — e fica em cache
 enquanto os filtros não mudarem. É o que evita esperar pelo Rt de dezenas de localidades que
@@ -445,6 +522,104 @@ calculadas; o botão *Calcular todas* preenche o restante.
 
 No boletim em Word a mesma informação vira **uma figura em grade** (localidade × vírus),
 limitada às 8 localidades com mais detecções.
+
+### 5.7 Mapas coropléticos
+
+Os mapas ficam na **Visão geral**, logo abaixo do gráfico do nowcasting, e são **dois, lado a
+lado**, sobre a mesma camada e os mesmos filtros:
+
+```
+┌─ Distribuição espacial dos casos ──────────────────────────────┐
+│  Camada de análise: [ Bairro / Região Administrativa ▾ ]       │
+│  30 territórios de residência · 10.635 casos                   │
+│  ┌────────────────────────────┬───────────────────────────┐    │
+│  │      Número de casos       │         Incidência        │    │
+│  │        escala azul         │  escala amarelo→vermelho  │    │
+│  │           ░░▓▓██           │           ░░▓▓██          │    │
+│  │     ░ cinza = sem dado     │  contorno preto discreto  │    │
+│  └────────────────────────────┴───────────────────────────┘    │
+│  texto interpretativo comparando volume e risco                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+A escolha é só da **camada**; as duas medidas aparecem sempre juntas, porque é a comparação
+entre elas que informa: um território populoso concentra casos sem necessariamente ter o maior
+risco por habitante, e é exatamente isso que separar casos de incidência deixa ver.
+
+**Camadas e como cada uma se liga aos dados**
+
+| Camada | Malha | Chave de junção | Simplificação |
+|---|---|---|---|
+| Bairro / Região Administrativa | `regioes_administrativas` (SITURB/GDF) `[16]` | nome padronizado da RA | 0,0005° (~50 m) |
+| Município | `BR_Municipios_2025` (IBGE) `[15]` | código IBGE de 6 dígitos | 0,003° (~300 m) |
+| Estado (UF) | `BR_UF_2025` (IBGE) `[15]` | sigla da UF | 0,02° (~2 km) |
+
+O seletor **só oferece a camada que faz sentido** para o recorte em tela. São três filtros, nesta
+ordem:
+
+1. a camada precisa ter o shapefile na pasta `Mapas/`;
+2. a malha precisa servir à UF escolhida — a de Regiões Administrativas é do Distrito Federal,
+   então só aparece quando o DF está em tela;
+3. a camada precisa render **pelo menos dois territórios**. Com o DF selecionado, "Município"
+   seria um polígono único (Brasília, já que a análise é por residência) e "Estado (UF)"
+   também: nenhum dos dois é um mapa, e os dois somem do seletor. Em Goiás, ao contrário,
+   "Município" é justamente a camada útil.
+
+**O mapa respeita a UF selecionada**, como todo o resto do painel, porque o recorte por
+residência (item [5.0](#50-local-de-residência-e-não-de-notificação)) já acontece antes. O
+mapa ainda guarda uma rede de segurança própria: se chegar uma base com territórios de fora da
+UF — um arquivo seu, por exemplo —, eles saem do desenho em vez de espalhar polígonos soltos
+pelo país, e o texto diz quantos casos são.
+
+**A ligação por município não usa o código da notificação.** No DF o campo `CO_MUN_RES` é o
+mesmo (Brasília) para todas as RAs, então o código da notificação não distingue território
+algum. A junção é feita pelo **nome do município do IBGE** (`local_municipio`) com a UF de
+residência, caindo para o nome isolado quando ele é único no país. No nível de RA há um
+de-para: o que a notificação registra como `estrutural scia` é `SCIA` na malha oficial.
+
+**População usada na incidência** — a mesma do resto do painel, do ano de referência do
+período:
+
+| Camada | Fonte da população |
+|---|---|
+| Bairro / RA | Codeplan, por RA `[13]` |
+| Município | soma dos territórios que caem no mesmo município (no DF, todas as RAs somam Brasília) |
+| Estado (UF) | estimativas do IBGE por UF `[11]` |
+
+O texto abaixo dos mapas diz qual fonte foi usada, e o mapa de incidência deixa em branco o
+território sem população de referência — ele continua aparecendo no mapa de casos.
+
+**Áreas sem dado continuam desenhadas.** O mapa carrega a malha do **recorte inteiro**, e não
+só a dos territórios com casos. Quem não tem valor a mostrar — nenhum caso no período, ou caso
+sem população para calcular a incidência — aparece em cinza-claro com um **contorno preto
+discreto**, e o balão diz por que está vazio. Sem isso a região sumiria no branco do fundo e
+não haveria como distinguir "zero casos" de "fora do mapa". É por isso também que o mapa de
+incidência pode ter mais áreas cinzas que o de casos: ali entram os territórios com casos mas
+sem população de referência.
+
+**O que fica de fora, e por quê.** Duas coisas diferentes, e o texto do mapa separa as duas:
+
+| Situação | Exemplo | O que o painel faz |
+|---|---|---|
+| Residente de outra UF | caso notificado no DF, morador de Valparaíso de Goiás | já saiu de todo o painel no recorte por residência; o aviso no topo diz quantos são |
+| Território sem polígono naquela camada | nome que não casa com a malha oficial | sai do desenho; o texto nomeia o maior e sugere trocar de camada |
+
+**Por que a primeira abertura demora e as seguintes não.** O shapefile de municípios do IBGE
+tem 309 MB. Lê-lo inteiro a cada clique seria inviável, então o painel:
+
+1. recorta **no próprio driver** (`SELECT ... WHERE SIGLA_UF IN (...)`), sem carregar o país;
+2. reprojeta para WGS84 e **simplifica** a geometria com `sf::st_simplify` `[22]`;
+3. grava **um arquivo por UF** em `Bancos/cache/malha_<camada>_<UF>.rds`;
+4. guarda o resultado montado também em memória, pela duração da sessão.
+
+O cache é por UF, e não por seleção: mudar de recorte reaproveita o que já foi lido e vai ao
+shapefile **só pelo que falta**. Na prática, a primeira montagem da camada de município custa
+cerca de 19 s e as seguintes, nada. A simplificação derruba a malha de 23 UFs de ~67 MB para
+~11 MB sem diferença visível na tela.
+
+O desenho em si é um `choropleth` do plotly `[19]` alimentado por GeoJSON, com **um único
+traço por mapa** — e não um polígono por traço, que é o que trava o navegador quando há
+centenas de territórios.
 
 ---
 
@@ -476,7 +651,22 @@ atual `[10]` é aberta, sem chave, com dois endpoints de SRAG:
 | `campos` | documentado, mas sempre responde 502 — não dá para reduzir o payload |
 | `dt_sin_pri` sozinho | estoura o timeout |
 | `sg_uf_not` sozinho | estoura o timeout; combinado com `anomes_sin_pri` responde em 2–3 s |
+| filtro por UF de residência | não documentado; o único recorte geográfico comprovado é `sg_uf_not` |
 | gzip | reduz a resposta ~28× (755 KB → 27 KB) |
+
+**O download é por UF de notificação; a análise, por residência.** São coisas diferentes, e a
+API só permite a primeira. O painel baixa a base da UF escolhida pelo campo de notificação e
+depois recorta pelos residentes (veja o
+[item 5.0](#50-local-de-residência-e-não-de-notificação)). A consequência é assimétrica, e
+vale saber qual é:
+
+- quem **mora fora** e foi notificado na UF: está na base, e o painel o exclui das análises
+  avisando quantos são;
+- quem **mora na UF** e foi notificado fora: não está na base, e não há como o painel saber.
+
+Para a maioria das UFs a segunda perda é pequena. Onde ela pesa — o Distrito Federal e o seu
+entorno goiano são o caso extremo no Brasil — a leitura correta é que o painel cobre os
+residentes **atendidos na própria UF**.
 
 **Volume e atualidade medidos:**
 
@@ -577,6 +767,7 @@ Toda vez que os dados são atualizados, o painel grava em `Bancos/cache`:
 | `base_api_<UF>.rds` | as linhas individuais, para a tabela e o boletim |
 | `srag_<UF>_<AAAAMM>.rds` | um arquivo por mês baixado da API |
 | `api_intervalo.json`, `ibge_anos.json`, `ibge_municipios.json` | metadados das APIs |
+| `malha_<camada>_<UF>.rds` | a malha do mapa, já recortada, reprojetada e simplificada (veja o [item 5.7](#57-mapas-coropléticos)) |
 
 **Passo a passo do que acontece ao abrir:**
 
@@ -590,7 +781,9 @@ As linhas ficam em `.rds` de propósito: 113 mil registros em JSON puro levariam
 segundos para abrir, o oposto do objetivo em computador lento. O `.json` guarda o manifesto e os
 dados consolidados, que é o que o painel precisa consultar para decidir se recalcula.
 
-O botão **Atualizar dados da fonte** apaga o cache e força o redownload.
+O botão **Atualizar dados da fonte** apaga o cache dos dados e força o redownload. As malhas
+dos mapas não dependem dos dados e por isso não são apagadas; para refazê-las, exclua os
+arquivos `malha_*.rds` de `Bancos/cache`.
 
 ---
 
@@ -604,6 +797,7 @@ README.md
 R/
   funcoes_boletim.R       cálculos, indicadores, gráficos ggplot e textos
   graficos.R              versão interativa (plotly) dos gráficos
+  mapas.R                 malhas, agregação espacial e mapas coropléticos
   fontes_dados.R          APIs, upload, cache, preferências e geração do Word
   nowcasting.R            correção do atraso de notificação
   boletim.Rmd             modelo do boletim em Word
@@ -613,7 +807,25 @@ Bancos/
   POP_LOCAL.csv           (opcional) população de territórios não-IBGE
   POP_LOCAL_MODELO.csv    modelo pronto para preencher
   SRAG.csv, POP.csv       bases antigas, mantidas como alternativa offline
+Mapas/
+  regioes_administrativas/      RAs do DF (SITURB/GDF)
+  BR_Municipios_2025/           municípios do IBGE
+  BR_UF_2025/                   Unidades da Federação do IBGE
+  BR_Regioes_2025/              regiões (não usada pelo painel)
+  BR_RG_Imediatas_2025/         regiões imediatas (não usada pelo painel)
 ```
+
+Os shapefiles de `Mapas/` são lidos **só na primeira vez** que você abre uma camada; depois o
+painel usa o cache. Para acrescentar a malha de outro recorte, basta colocar a pasta do
+shapefile em `Mapas/` e registrá-la na lista `MALHAS`, no alto de `R/mapas.R`.
+
+**As malhas do IBGE não vêm no repositório.** O shapefile de municípios tem 306 MB, acima do
+limite de 100 MB por arquivo do GitHub, e as quatro malhas do IBGE estão em `.gitignore`. Baixe-as
+em [IBGE — Malhas territoriais](https://www.ibge.gov.br/geociencias/organizacao-do-territorio/malhas-territoriais.html)
+`[15]`, no formato shapefile da Divisão Territorial Brasileira, e extraia cada uma na pasta de
+mesmo nome dentro de `Mapas/`. A malha das Regiões Administrativas do DF `[16]`, que tem 1,7 MB,
+está versionada. Enquanto uma malha não estiver na pasta, o painel simplesmente **não oferece
+aquela camada** — o resto funciona normalmente.
 
 **Regra de ouro:** tudo que calcula número ou desenha gráfico vive em `R/funcoes_boletim.R`. O
 painel e o boletim em Word chamam **as mesmas funções**, para que nunca divirjam.
@@ -627,11 +839,18 @@ painel e o boletim em Word chamam **as mesmas funções**, para que nunca divirj
 | O painel não carrega nada | Selecione uma UF. Na primeira abertura ela vem vazia de propósito. |
 | Primeira carga muito demorada | É o download do histórico completo da UF. Acontece uma vez por UF; depois o cache resolve. |
 | Seções de incidência vazias | Falta população para os territórios selecionados. Veja o [item 7.2](#72-outros-territórios-fora-do-recorte-do-ibge). |
+| Menos casos do que eu esperava | A análise é por local de **residência**: notificações de quem mora em outra UF não entram. O aviso no topo diz quantas são. Veja o [item 5.0](#50-local-de-residência-e-não-de-notificação). |
 | `Pandoc nao encontrado` | Instale o RStudio (que já o inclui) ou o Pandoc. Só afeta o `.docx`. |
 | Rt não estimado | Período curto ou poucos casos por localidade/vírus. Amplie o intervalo ou use um nível mais agregado. |
 | Nowcasting indisponível | A base não tem `DT_DIGITA`. Use a fonte via API. |
 | "Nenhum caso restou após os filtros" | A combinação de filtros é restritiva demais. Use *Limpar filtros*. |
 | Dados desatualizados | Clique em *Atualizar dados da fonte*. Lembrando que a própria API publica com defasagem. |
+| `Malha indisponível para esta camada` | Falta a pasta do shapefile em `Mapas/`. Veja a lista no [item 9](#9-arquitetura-dos-arquivos). |
+| Mapa demorou na primeira vez | É a leitura do shapefile de municípios (309 MB). Acontece uma vez por UF; depois vem do cache. |
+| A camada que eu quero não aparece no seletor | Ela renderia menos de dois territórios no recorte atual (no DF, "Município" e "Estado"), ou a malha não está em `Mapas/`. |
+| Casos "de residentes de fora" no mapa | São notificações da UF selecionada feitas para quem mora em outra. Contam nos indicadores; o mapa fica no recorte escolhido. |
+| Áreas cinzas no mapa | Território sem caso no período, ou — no mapa de incidência — sem população de referência. O balão diz qual dos dois. |
+| Mapa de incidência quase vazio | Falta população para os territórios. Veja o [item 7.2](#72-outros-territórios-fora-do-recorte-do-ibge). |
 
 ---
 
@@ -656,18 +875,21 @@ painel e o boletim em Word chamam **as mesmas funções**, para que nunca divirj
 12. IBGE. **Censo Demográfico 2022 — população residente**. SIDRA, tabela 4714.
 13. CODEPLAN/IPEDF. **Projeções populacionais das Regiões Administrativas do Distrito Federal**. Planilha `codeplan_populacao_long.csv`, incluída no projeto.
 14. SOUSA, M. L. et al. Vigilância da Síndrome Respiratória Aguda Grave: análise dos dados de notificação no Brasil. ***Epidemiologia e Serviços de Saúde***, v. 34, n. 1, 2025.
+15. IBGE. **Malhas territoriais — Divisão Territorial Brasileira 2025**. Shapefiles de municípios, Unidades da Federação, regiões e regiões geográficas imediatas. Arquivos `BR_Municipios_2025`, `BR_UF_2025`, `BR_Regioes_2025` e `BR_RG_Imediatas_2025`, na pasta `Mapas/`.
+16. DISTRITO FEDERAL. **Regiões Administrativas do Distrito Federal** — base cartográfica oficial (SITURB/GDF). Shapefile `regioes_administrativas`, na pasta `Mapas/`.
 
 ### Software
 
-15. CORI, A. et al. **EpiEstim: Estimate Time Varying Reproduction Numbers from Epidemic Curves**. Pacote R, versão 2.2.5.
-16. WICKHAM, H. **ggplot2: Elegant Graphics for Data Analysis**. 2. ed. Springer, 2016. Pacote R, versão 4.0.3.
-17. SIEVERT, C. **Interactive Web-Based Data Visualization with R, plotly, and shiny**. Chapman and Hall/CRC, 2020. Pacote R `plotly`, versão 4.12.0.
-18. CHANG, W. et al. **shiny: Web Application Framework for R**. Pacote R, versão 1.11.1.
-19. R CORE TEAM. **R: A Language and Environment for Statistical Computing**. R Foundation for Statistical Computing, Viena. Versão 4.5.2.
+17. CORI, A. et al. **EpiEstim: Estimate Time Varying Reproduction Numbers from Epidemic Curves**. Pacote R, versão 2.2.5.
+18. WICKHAM, H. **ggplot2: Elegant Graphics for Data Analysis**. 2. ed. Springer, 2016. Pacote R, versão 4.0.3.
+19. SIEVERT, C. **Interactive Web-Based Data Visualization with R, plotly, and shiny**. Chapman and Hall/CRC, 2020. Pacote R `plotly`, versão 4.12.0.
+20. CHANG, W. et al. **shiny: Web Application Framework for R**. Pacote R, versão 1.11.1.
+21. R CORE TEAM. **R: A Language and Environment for Statistical Computing**. R Foundation for Statistical Computing, Viena. Versão 4.5.2.
+22. PEBESMA, E. Simple Features for R: Standardized Support for Spatial Vector Data. ***The R Journal***, v. 10, n. 1, p. 439-446, 2018. Pacote R `sf`, versão 1.0.21.
 
 ### Leitura complementar
 
-20. FERREIRA, M. R.; COSTA, D. L.; PEREIRA, A. C. Estimativas do número reprodutivo efetivo (Rt) na vigilância viral respiratória. ***Revista Brasileira de Epidemiologia***, v. 26, e230001, 2023.
+23. FERREIRA, M. R.; COSTA, D. L.; PEREIRA, A. C. Estimativas do número reprodutivo efetivo (Rt) na vigilância viral respiratória. ***Revista Brasileira de Epidemiologia***, v. 26, e230001, 2023.
 
 ---
 

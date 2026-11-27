@@ -15,3 +15,14 @@ Bancos/preferencias.json
 
 # População preenchida localmente (dado local, não versionado)
 Bancos/POP_LOCAL.csv
+
+# Malhas dos mapas. Os shapefiles do IBGE são grandes — o de municípios tem
+# 306 MB, acima do limite de 100 MB por arquivo do GitHub — e podem ser
+# rebaixados do próprio IBGE a qualquer momento. Os .zip são só a origem dos
+# arquivos já extraídos ao lado. A malha das RAs do DF (1,7 MB) fica versionada,
+# porque é pequena e específica do projeto.
+Mapas/*.zip
+Mapas/BR_Municipios_2025/
+Mapas/BR_UF_2025/
+Mapas/BR_Regioes_2025/
+Mapas/BR_RG_Imediatas_2025/

@@ -341,6 +341,20 @@ p(glue::glue(
 ))
 
 p(glue::glue(
+  "**Local de residência.** Todos os indicadores, gráficos, tabelas e mapas deste boletim ",
+  "referem-se ao **local de residência** do caso, e não ao de notificação — é a residência que ",
+  "define a população usada como denominador da incidência. A UF de residência vem de ",
+  "`SG_UF_RES` e o município, de `ID_MN_RESI`; quando a UF de residência não está preenchida, ",
+  "usa-se a de notificação.",
+  if (!is.null(B$n_fora_uf) && B$n_fora_uf > 0) glue::glue(
+    " Por esse critério, {formatar_n(B$n_fora_uf)} notificação(ões) da base são de residentes de ",
+    "outras unidades da federação e não entram nas análises. Em contrapartida, casos de ",
+    "residentes de {B$cfg$estado} notificados em outras UFs não constam da base, que é ",
+    "disponibilizada por UF de notificação."
+  ) else ""
+))
+
+p(glue::glue(
   "**Definições.** A semana epidemiológica e o ano epidemiológico são calculados a partir da data ",
   "dos primeiros sintomas (`DT_SIN_PRI`) pelo calendário epidemiológico (domingo a sábado). ",
   "A incidência é expressa por 100 mil habitantes. O diagrama de controle compara a incidência ",

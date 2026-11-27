@@ -125,7 +125,7 @@ PREFS_PADRAO <- list(
   nome_territorio = "",
   f_sexo = "", f_raca = "", f_faixa = "", f_virus = "",
   rt_nivel = "local_bairro", rt_colunas = 2L,
-  rt_itens = "", rt_virus = "",
+  rt_itens = "", mapa_camada = "",
   titulo = "", secretaria = "", setor = "",
   edicao = "", se_boletim = "", ano_boletim = "", equipe = ""
 )

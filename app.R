@@ -20,13 +20,14 @@ if (is.null(getOption("repos")) || is.na(getOption("repos")["CRAN"]) ||
 pacotes <- c("shiny", "bslib", "DT", "plotly", "jsonlite", "curl",
              "dplyr", "tidyr", "ggplot2", "readr", "stringr", "stringi",
              "lubridate", "glue", "scales", "tibble", "forcats", "purrr",
-             "slider", "EpiEstim", "rmarkdown", "knitr")
+             "slider", "EpiEstim", "rmarkdown", "knitr", "sf")
 faltando <- pacotes[!(pacotes %in% rownames(utils::installed.packages()))]
 if (length(faltando) > 0) utils::install.packages(faltando)
 
 library(shiny); library(bslib); library(DT); library(plotly)
 
-for (f in c("R/funcoes_boletim.R", "R/fontes_dados.R", "R/nowcasting.R", "R/graficos.R")) {
+for (f in c("R/funcoes_boletim.R", "R/fontes_dados.R", "R/nowcasting.R",
+            "R/graficos.R", "R/mapas.R")) {
   source(f, encoding = "UTF-8")
 }
 
@@ -146,12 +147,16 @@ ui <- bslib::page_navbar(
 
       bslib::accordion_panel(
         "Estatística", value = "estat", icon = icon("chart-column"),
-        selectizeInput("f_virus", "Tipo de vírus", choices = unname(VIRUS_MAP),
+        selectizeInput("f_virus", "Vírus respiratórios", choices = unname(VIRUS_MAP),
                        multiple = TRUE,
                        options = list(placeholder = "todos",
                                       plugins = list("remove_button"))),
-        div(class = "text-muted small mb-3",
-            "Mantém apenas os casos com detecção positiva do(s) vírus escolhido(s)."),
+        div(class = "d-flex gap-2 flex-wrap mb-1",
+            actionButton("f_virus_todos", "Todos os vírus do banco",
+                         class = "btn-outline-secondary btn-sm", icon = icon("check-double")),
+            actionButton("f_virus_limpar", "Limpar vírus",
+                         class = "btn-outline-secondary btn-sm")),
+        div(class = "text-muted small mb-3", textOutput("sub_virus")),
         sliderInput("f_anos", "Intervalo de anos (série histórica)",
                     min = 2019, max = as.integer(format(Sys.Date(), "%Y")),
                     value = c(PREFS$filtro_ano_ini, PREFS$filtro_ano_fim),
@@ -204,6 +209,24 @@ ui <- bslib::page_navbar(
     ),
     cartao("Casos por semana epidemiológica e ano", "g_ano", "t_ondas"),
     cartao("Casos, incidência e nowcasting", "g_inc", "t_resumo", 460),
+
+    bslib::card(
+      bslib::card_header("Distribuição espacial dos casos"),
+      div(class = "px-3 pt-2",
+          bslib::layout_columns(
+            col_widths = c(6, 6), fill = FALSE,
+            selectInput("mapa_camada", "Camada de análise", choices = NULL,
+                        width = "100%"),
+            div(class = "pt-1", textOutput("sub_mapa"))
+          )),
+      bslib::layout_columns(
+        col_widths = c(6, 6), fill = FALSE,
+        plotly::plotlyOutput("g_mapa_casos", height = "440px"),
+        plotly::plotlyOutput("g_mapa_inc", height = "440px")
+      ),
+      bslib::card_footer(uiOutput("t_mapa"))
+    ),
+
     bslib::card(bslib::card_header("Resumo da situação epidemiológica"),
                 tableOutput("tab_resumo"))
   ),
@@ -268,15 +291,12 @@ ui <- bslib::page_navbar(
           numericInput("rt_colunas", "Facetas por linha", PREFS$rt_colunas, 1, 4, 1)
         ),
 
-        selectizeInput("rt_virus", "Vírus a exibir nas facetas", choices = NULL,
-                       multiple = TRUE, width = "100%",
-                       options = list(placeholder = "todos os vírus do período",
-                                      plugins = list("remove_button"))),
-        div(class = "d-flex gap-2 flex-wrap mb-3",
-            actionButton("rt_virus_todos", "Selecionar todos os vírus",
-                         class = "btn-outline-secondary btn-sm", icon = icon("check-double")),
-            actionButton("rt_virus_limpar", "Limpar vírus",
-                         class = "btn-outline-secondary btn-sm")),
+        div(class = "alert alert-light border small py-2 mb-3",
+            icon("virus"), " ",
+            tags$span(class = "fw-semibold", "Vírus das facetas: "),
+            textOutput("sub_rt_virus", inline = TRUE),
+            tags$span(class = "text-muted",
+                      " — ajuste em Estatística › Vírus respiratórios, no filtro lateral.")),
 
         selectizeInput("rt_itens", "Localidades", choices = NULL, multiple = TRUE,
                        width = "100%",
@@ -367,7 +387,7 @@ server <- function(input, output, session) {
       rt_nivel = input$rt_nivel %||% "local_bairro",
       rt_colunas = input$rt_colunas %||% 2,
       rt_itens = paste(input$rt_itens %||% character(0), collapse = ";"),
-      rt_virus = paste(input$rt_virus %||% character(0), collapse = ";")
+      mapa_camada = input$mapa_camada %||% ""
     )))
   })
 
@@ -492,11 +512,11 @@ server <- function(input, output, session) {
       diag_max = input$diag_max, diag_colunas = input$diag_colunas,
       sexo = input$f_sexo, raca = input$f_raca,
       faixa_etaria = input$f_faixa, virus = input$f_virus,
-      estado = input$uf, coluna_uf = "SG_UF_NOT", coluna_municipio = "ID_MN_RESI_pad",
+      estado = input$uf, coluna_uf = "local_estado", coluna_municipio = "ID_MN_RESI_pad",
       municipio = input$municipios, usar_filtro_municipio = identical(input$escopo, "mun"),
       nome_territorio = av$nome_territorio,
       rt_nivel = input$rt_nivel %||% "local_bairro",
-      rt_itens = input$rt_itens, rt_virus = input$rt_virus,
+      rt_itens = input$rt_itens, rt_virus = input$f_virus,
       fonte = input$fonte, arquivo_proprio = arquivo_enviado(),
       titulo = PREFS$titulo, secretaria = PREFS$secretaria, setor = PREFS$setor,
       edicao = PREFS$edicao, se_boletim = PREFS$se_boletim,
@@ -550,11 +570,61 @@ server <- function(input, output, session) {
     stats::setNames(v, formatar_nome_territorio(v))
   })
 
-  opcoes_virus_rt <- reactive({
+  # ----- vírus identificados no PCR -----------------------------------------
+  # Calculado na base inteira (e nao no contexto filtrado): se dependesse de
+  # B(), escolher um virus apagaria todos os outros da lista.
+  opcoes_virus <- reactive({
+    bs <- tryCatch(bases(), error = function(e) NULL)
+    req(!is.null(bs))
+    virus_identificados(bs$srag)
+  })
+
+  # So repovoa quando a base muda; a escolha que continua valida e preservada.
+  observeEvent(opcoes_virus(), {
+    op <- opcoes_virus()
+    if (length(op) == 0) return()
+    sel <- intersect(isolate(input$f_virus) %||% character(0), op)
+    updateSelectizeInput(session, "f_virus", choices = op, selected = sel)
+  })
+
+  observeEvent(input$f_virus_todos, {
+    op <- opcoes_virus()
+    updateSelectizeInput(session, "f_virus", choices = op, selected = op)
+  })
+  observeEvent(input$f_virus_limpar, {
+    updateSelectizeInput(session, "f_virus", choices = opcoes_virus(),
+                         selected = character(0))
+  })
+
+  output$sub_virus <- renderText({
+    op <- tryCatch(opcoes_virus(), error = function(e) character(0))
+    sel <- input$f_virus %||% character(0)
+    if (length(sel) > 0) {
+      sprintf("%d de %d vírus do banco; mantém só os casos com detecção positiva.",
+              length(sel), max(length(op), length(sel)))
+    } else if (length(op) > 0) {
+      sprintf("%d vírus identificados por PCR no banco; sem seleção, entram todos.",
+              length(op))
+    } else "nenhuma coluna PCR reconhecida no banco."
+  })
+
+  # Vírus que o Rt e os demais recortes por agente usam. Sem seleção no filtro
+  # geral, entram os 4 mais frequentes do período — com mais facetas que isso a
+  # sanfona fica ilegível e o cálculo, lento.
+  virus_efetivos <- reactive({
+    sel <- input$f_virus %||% character(0)
+    if (length(sel) > 0) return(sel)
     b <- tryCatch(B(), error = function(e) NULL)
-    req(!is.null(b))
+    if (is.null(b)) return(character(0))
     v <- b$deteccoes$virus_nome
-    names(sort(table(v[!is.na(v)]), decreasing = TRUE))
+    utils::head(names(sort(table(v[!is.na(v)]), decreasing = TRUE)), 4)
+  })
+
+  output$sub_rt_virus <- renderText({
+    v <- tryCatch(virus_efetivos(), error = function(e) character(0))
+    if (length(v) == 0) return("nenhum vírus disponível")
+    extra <- if (length(input$f_virus %||% character(0)) == 0) " (4 mais frequentes)" else ""
+    paste0(paste(v, collapse = ", "), extra)
   })
 
   # So repovoa quando o conjunto de opcoes muda; o que ja foi escolhido e
@@ -569,14 +639,6 @@ server <- function(input, output, session) {
     updateSelectizeInput(session, "rt_itens", choices = op, selected = sel)
   })
 
-  observeEvent(opcoes_virus_rt(), {
-    op <- opcoes_virus_rt()
-    sel <- intersect(isolate(input$rt_virus) %||% character(0), op)
-    if (length(sel) == 0) sel <- intersect(strsplit(PREFS$rt_virus %||% "", ";")[[1]], op)
-    if (length(sel) == 0) sel <- utils::head(op, 4)           # os 4 mais frequentes
-    updateSelectizeInput(session, "rt_virus", choices = op, selected = sel)
-  })
-
   observeEvent(input$rt_todos, {
     op <- opcoes_locais()
     updateSelectizeInput(session, "rt_itens", choices = op, selected = unname(op))
@@ -585,22 +647,13 @@ server <- function(input, output, session) {
     updateSelectizeInput(session, "rt_itens", choices = opcoes_locais(),
                          selected = character(0))
   })
-  observeEvent(input$rt_virus_todos, {
-    op <- opcoes_virus_rt()
-    updateSelectizeInput(session, "rt_virus", choices = op, selected = op)
-  })
-  observeEvent(input$rt_virus_limpar, {
-    updateSelectizeInput(session, "rt_virus", choices = opcoes_virus_rt(),
-                         selected = character(0))
-  })
-
   # ----- cache do Rt por localidade -----------------------------------------
   # reactiveValues (e nao um environment comum) para que a tabela abaixo se
   # atualize sozinha assim que uma seção nova for calculada. A leitura
   # dentro de rt_do_local() é isolada, para não criar laço.
   cache_rt <- reactiveValues()
 
-  observeEvent(list(cfg_atual(), input$rt_nivel, input$rt_virus), {
+  observeEvent(list(cfg_atual(), input$rt_nivel, virus_efetivos()), {
     for (k in names(cache_rt)) cache_rt[[k]] <- NULL
   }, ignoreInit = TRUE)
 
@@ -609,7 +662,7 @@ server <- function(input, output, session) {
     pronto <- isolate(cache_rt[[chave]])
     if (!is.null(pronto)) return(pronto)
     r <- calcular_rt(B(), nivel = input$rt_nivel %||% "local_bairro",
-                     locais = loc, virus = input$rt_virus)
+                     locais = loc, virus = virus_efetivos())
     cache_rt[[chave]] <- if (is.null(r)) tibble::tibble() else r
     isolate(cache_rt[[chave]])
   }
@@ -621,13 +674,14 @@ server <- function(input, output, session) {
       return(bslib::card(div(class = "p-3 text-muted",
                              "Escolha ao menos uma localidade na lista acima.")))
     }
-    if (length(input$rt_virus %||% character(0)) == 0) {
+    if (length(virus_efetivos()) == 0) {
       return(bslib::card(div(class = "p-3 text-muted",
-                             "Escolha ao menos um vírus para montar as facetas.")))
+                             paste("Nenhum vírus disponível. Escolha ao menos um em",
+                                   "Estatística › Vírus respiratórios."))))
     }
 
     resumo <- resumo_locais_rt(B(), input$rt_nivel %||% "local_bairro",
-                               locais, input$rt_virus)
+                               locais, virus_efetivos())
     ordem <- if (nrow(resumo) > 0) resumo$local else locais
     ordem <- c(ordem, setdiff(locais, ordem))
 
@@ -724,6 +778,62 @@ server <- function(input, output, session) {
   # ----------------------------------------------------------------- gráficos
   output$g_ano       <- plotly::renderPlotly(pl_casos_por_ano(B(), I()))
   output$g_inc       <- plotly::renderPlotly(pl_incidencia(B(), I(), NC()))
+
+  # ------------------------------------------------------------------- mapas
+  # Só entram as camadas com shapefile em Mapas/ que servem ao recorte em tela:
+  # a malha de Regiões Administrativas é só do DF, e uma camada que renderia um
+  # polígono único (Município, no DF) não é oferecida.
+  camadas_mapa <- reactive({
+    b <- tryCatch(B(), error = function(e) NULL)
+    if (is.null(b)) camadas_disponiveis(NULL) else camadas_para_contexto(b)
+  })
+
+  observeEvent(camadas_mapa(), {
+    op <- camadas_mapa()
+    if (length(op) == 0) {
+      updateSelectInput(session, "mapa_camada",
+                        choices = c("nenhuma malha em Mapas/" = ""))
+      return()
+    }
+    esc <- stats::setNames(names(op), unname(op))
+    atual <- isolate(input$mapa_camada) %||% ""
+    sel <- if (atual %in% names(op)) atual
+           else if ((PREFS$mapa_camada %||% "") %in% names(op)) PREFS$mapa_camada
+           else names(op)[1]
+    updateSelectInput(session, "mapa_camada", choices = esc, selected = sel)
+  })
+
+  # Dados e malha saem juntos: a primeira leitura do shapefile é lenta, as
+  # seguintes vêm do cache em Bancos/cache.
+  MAPA <- reactive({
+    cm <- input$mapa_camada %||% ""
+    shiny::validate(need(nzchar(cm), "Nenhuma malha disponível na pasta Mapas/."))
+    withProgress(message = "Preparando o mapa...", value = 0.4,
+                 preparar_mapa(B(), cm))
+  })
+
+  output$g_mapa_casos <- plotly::renderPlotly(mapa_plotly(MAPA(), "casos", 440))
+  output$g_mapa_inc   <- plotly::renderPlotly(mapa_plotly(MAPA(), "incidencia", 440))
+
+  output$sub_mapa <- renderText({
+    m <- tryCatch(MAPA(), error = function(e) NULL)
+    if (is.null(m) || nrow(m$dados) == 0) return("sem territórios para mapear")
+    d <- m$dados
+    partes <- sprintf("%s território(s) no mapa · %s casos · %s com incidência",
+                      formatar_n(nrow(d)), formatar_n(sum(d$casos)),
+                      formatar_n(sum(!is.na(d$incidencia))))
+    if (nrow(m$fora_uf) > 0) {
+      partes <- paste0(partes, " · ", formatar_n(sum(m$fora_uf$casos)),
+                       " de residentes de fora")
+    }
+    if (nrow(m$fora) > 0) {
+      partes <- paste0(partes, " · ", formatar_n(nrow(m$fora)), " sem polígono")
+    }
+    partes
+  })
+
+  output$t_mapa <- renderUI(md(txt_mapa(B(), MAPA())))
+
   output$g_virus     <- plotly::renderPlotly(pl_virus_total(B(), I()))
   output$g_virus_sem <- plotly::renderPlotly(pl_virus_semana(B(), I()))
   output$g_virus_fe  <- plotly::renderPlotly(pl_virus_fe(B(), I()))
@@ -919,6 +1029,8 @@ server <- function(input, output, session) {
                                  stop(MSG_SEM_PANDOC) }
       salvar_do_modal()
       cfg <- isolate(cfg_atual())
+      # mesmos vírus das facetas do painel, inclusive o recorte automático
+      cfg$rt_virus <- isolate(virus_efetivos())
       txt <- function(id) {
         v <- input[[id]]
         if (is.null(v) || length(v) == 0 || is.na(v)) "" else trimws(as.character(v))

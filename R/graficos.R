@@ -71,7 +71,40 @@ para_plotly <- function(g, altura = NULL, legenda_embaixo = FALSE) {
   }
   if (length(anotacoes) > 0) p <- plotly::layout(p, annotations = anotacoes)
 
-  cfg_plotly(p)
+  cfg_plotly(unificar_legenda(p))
+}
+
+#' Deixa cada cor aparecer uma única vez na legenda.
+#'
+#' Em gráficos facetados o ggplotly cria um traço por faceta e nomeia cada um
+#' como "(Zona de controle,11)". O resultado é a mesma cor repetida dezenas de
+#' vezes na legenda. Aqui o sufixo da faceta é removido, os traços de mesmo
+#' nome entram num `legendgroup` comum — para que clicar na legenda ligue e
+#' desligue a série em todas as facetas de uma vez — e só o primeiro de cada
+#' nome continua visível na legenda.
+unificar_legenda <- function(p) {
+  b <- tryCatch(plotly::plotly_build(p), error = function(e) NULL)
+  if (is.null(b) || is.null(b$x$data)) return(p)
+
+  vistos <- character(0)
+  b$x$data <- lapply(b$x$data, function(tr) {
+    nm <- tr$name
+    if (is.null(nm) || length(nm) != 1 || !nzchar(nm)) return(tr)
+
+    grupo <- sub("^\\((.*),\\s*-?[0-9]+\\)$", "\\1", nm)
+    tr$name <- grupo
+    tr$legendgroup <- grupo
+
+    if (isFALSE(tr$showlegend)) return(tr)   # já estava escondido de propósito
+    if (grupo %in% vistos) {
+      tr$showlegend <- FALSE
+    } else {
+      tr$showlegend <- TRUE
+      vistos <<- c(vistos, grupo)
+    }
+    tr
+  })
+  b
 }
 
 # -----------------------------------------------------------------------------
@@ -222,7 +255,10 @@ pl_rt_local <- function(B, RT, local = NULL, colunas = 2, altura = NULL) {
 # Mensagem quando não há o que desenhar
 # -----------------------------------------------------------------------------
 pl_aviso <- function(mensagem, altura = NULL) {
-  plotly::plot_ly(height = altura) %>%
+  # O traço vazio é declarado explicitamente: sem type/mode o plotly tenta
+  # adivinhar e enche o console de "No trace type specified".
+  plotly::plot_ly(height = altura, type = "scatter", mode = "markers",
+                  x = numeric(0), y = numeric(0), hoverinfo = "skip") %>%
     plotly::layout(
       xaxis = list(visible = FALSE), yaxis = list(visible = FALSE),
       annotations = list(list(

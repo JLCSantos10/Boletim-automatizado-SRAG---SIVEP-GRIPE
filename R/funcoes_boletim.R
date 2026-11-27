@@ -305,6 +305,8 @@ normalizar_params <- function(P) {
   estado <- pega("estado", NULL, alternativo = "uf")
   cfg$estado <- if (vazio(estado)) NULL else toupper(trimws(as.character(estado)[1]))
 
+  # Coluna de UF para bases que nao tenham os niveis de localidade montados.
+  # Com eles, montar_contexto usa local_estado (residencia) e ignora esta.
   cfg$coluna_uf        <- as.character(pega("coluna_uf", "SG_UF_NOT"))
   cfg$coluna_municipio <- as.character(pega("coluna_municipio", "ID_MN_RESI_pad"))
 
@@ -366,15 +368,24 @@ normalizar_params <- function(P) {
 # ler_params() e carregar_bases() agora vivem em R/fontes_dados.R: o painel le
 # da API do SUS / do arquivo do usuario e a populacao da API do IBGE.
 
+# Como em montar_contexto, a UF considerada e a de residencia (local_estado),
+# caindo para a coluna indicada so quando os niveis de localidade nao existem.
+coluna_uf_efetiva <- function(srag, coluna_uf = "SG_UF_NOT") {
+  if ("local_estado" %in% names(srag)) "local_estado" else coluna_uf
+}
+
 ufs_disponiveis <- function(bases, coluna_uf = "SG_UF_NOT") {
-  if (!coluna_uf %in% names(bases$srag)) return(character(0))
-  sort(unique(toupper(trimws(as.character(bases$srag[[coluna_uf]])))))
+  col <- coluna_uf_efetiva(bases$srag, coluna_uf)
+  if (!col %in% names(bases$srag)) return(character(0))
+  u <- sort(unique(toupper(trimws(as.character(bases$srag[[col]])))))
+  u[!is.na(u) & nzchar(u)]
 }
 
 territorios_disponiveis <- function(bases, estado = NULL, coluna_uf = "SG_UF_NOT") {
   d <- bases$srag
-  if (!is.null(estado) && coluna_uf %in% names(d)) {
-    d <- d[toupper(trimws(as.character(d[[coluna_uf]]))) == estado, ]
+  col <- coluna_uf_efetiva(d, coluna_uf)
+  if (!is.null(estado) && col %in% names(d)) {
+    d <- d[!is.na(d[[col]]) & toupper(trimws(as.character(d[[col]]))) == estado, ]
   }
   names(sort(table(d$municipio), decreasing = TRUE))
 }
@@ -564,6 +575,26 @@ aplicar_filtros_demograficos <- function(srag, cfg) {
   srag
 }
 
+#' Virus com ao menos uma deteccao positiva por PCR na base carregada.
+#'
+#' Serve para popular o filtro geral de virus com o que existe de fato nos
+#' dados, em ordem de frequencia. E calculado sobre a base inteira - antes do
+#' recorte de periodo e do proprio filtro de virus - para que escolher um virus
+#' nao esvazie a lista de opcoes.
+virus_identificados <- function(srag) {
+  cols <- intersect(names(VIRUS_MAP), names(srag))
+  if (length(cols) == 0 || nrow(srag) == 0) return(character(0))
+
+  n <- vapply(cols, function(cc) {
+    x <- stringr::str_to_upper(stringr::str_trim(as.character(srag[[cc]])))
+    sum(x %in% c("1", "TRUE", "T", "POSITIVO", "POS", "DETECTADO", "REAGENTE"))
+  }, numeric(1))
+
+  n <- n[is.finite(n) & n > 0]
+  if (length(n) == 0) return(character(0))
+  unname(VIRUS_MAP[names(sort(n, decreasing = TRUE))])
+}
+
 #' Aplica os filtros de UF, território e período e devolve o "contexto" usado
 #' por todos os gráficos, textos e tabelas.
 montar_contexto <- function(bases, cfg) {
@@ -572,18 +603,29 @@ montar_contexto <- function(bases, cfg) {
   n_total_base <- nrow(srag)
 
   # ----- UF -----------------------------------------------------------------
+  # A analise e por LOCAL DE RESIDENCIA, nao de notificacao: e a residencia que
+  # define a populacao do denominador da incidencia. local_estado e a UF de
+  # residencia, caindo para a de notificacao so quando aquela nao vem
+  # preenchida. A coluna de notificacao fica como alternativa para bases
+  # proprias que nao tenham a de residencia.
+  col_uf <- if ("local_estado" %in% names(srag)) "local_estado" else cfg$coluna_uf
+  cfg$coluna_uf_usada <- col_uf
+  n_fora_uf <- 0L
+
   if (!is.null(cfg$estado)) {
-    if (!cfg$coluna_uf %in% names(srag)) {
-      stop("Coluna de UF '", cfg$coluna_uf, "' nao existe na base. ",
+    if (!col_uf %in% names(srag)) {
+      stop("Coluna de UF '", col_uf, "' nao existe na base. ",
            "Ajuste 'coluna_uf'. Colunas: ", paste(names(srag), collapse = ", "))
     }
-    ufs_base <- sort(unique(toupper(trimws(as.character(srag[[cfg$coluna_uf]])))))
+    ufs_base <- sort(unique(toupper(trimws(as.character(srag[[col_uf]])))))
     if (!cfg$estado %in% ufs_base) {
-      stop("A UF '", cfg$estado, "' nao aparece na coluna ", cfg$coluna_uf,
+      stop("A UF '", cfg$estado, "' nao aparece na coluna ", col_uf,
            " da base. UFs disponiveis: ", paste(ufs_base, collapse = ", "))
     }
+    antes <- nrow(srag)
     srag <- srag %>%
-      dplyr::filter(toupper(trimws(.data[[cfg$coluna_uf]])) == cfg$estado)
+      dplyr::filter(toupper(trimws(.data[[col_uf]])) == cfg$estado)
+    n_fora_uf <- antes - nrow(srag)
   }
   n_apos_uf <- nrow(srag)
 
@@ -683,6 +725,17 @@ montar_contexto <- function(bases, cfg) {
     avisos <- c(avisos, "Nenhuma coluna PCR_* reconhecida: as seções de vírus ficarão vazias.")
   }
 
+  # A diferenca entre o total da base e o total analisado nao e erro: sao
+  # notificacoes de quem mora em outra UF. Dito aqui para que ninguem compare o
+  # numero do painel com o total bruto e ache que algo se perdeu.
+  if (n_fora_uf > 0 && identical(col_uf, "local_estado")) {
+    avisos <- c(avisos, paste0(
+      formatar_n(n_fora_uf), " notificação(ões) da base são de residentes de outras UFs e ",
+      "ficaram de fora: a análise é por local de residência. Casos de residentes ",
+      "de ", cfg$estado, " notificados em outras UFs não constam desta base, porque ",
+      "a API entrega os dados por UF de notificação."))
+  }
+
   deteccoes <- if (length(cols_pcr) > 0) {
     srag_ref %>%
       dplyr::select(dplyr::any_of(c("SE", "ano", "semana_idx", "semana_rotulo", "municipio",
@@ -741,7 +794,8 @@ montar_contexto <- function(bases, cfg) {
     rotulo_periodo_frase = cfg$rotulo_periodo_frase,
     fonte_populacao = bases$fonte_populacao %||% "API do IBGE (SIDRA)",
     total_notificacoes = nrow(srag_ref), total_deteccoes = nrow(deteccoes),
-    n_total_base = n_total_base, n_apos_uf = n_apos_uf,
+    n_total_base = n_total_base, n_apos_uf = n_apos_uf, n_fora_uf = n_fora_uf,
+    coluna_uf_usada = col_uf,
     avisos = avisos
   )
 }
