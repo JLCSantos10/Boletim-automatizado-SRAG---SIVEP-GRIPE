@@ -1,0 +1,365 @@
+---
+title: "Boletim epidemiológico de SRAG"
+author: ""
+date: "`r format(Sys.Date(), '%d/%m/%Y')`"
+output:
+  word_document:
+    toc: true
+    toc_depth: 2
+    df_print: paged
+  html_document:
+    toc: true
+    toc_depth: 2
+    df_print: paged
+---
+
+```{r setup-encoding, include=FALSE}
+options(encoding = "UTF-8")
+
+# Locale em português (apenas Windows tem "Portuguese_Brazil.1252"); em outros
+# sistemas tenta pt_BR.UTF-8 e, se nada funcionar, segue com o locale padrão.
+invisible(suppressWarnings(tryCatch({
+  if (.Platform$OS.type == "windows") {
+    Sys.setlocale("LC_ALL", "Portuguese_Brazil.1252")
+  } else {
+    Sys.setlocale("LC_ALL", "pt_BR.UTF-8")
+  }
+}, error = function(e) NULL)))
+
+dir.create("BOLETIM_SRAG_files/figure-docx", recursive = TRUE, showWarnings = FALSE)
+```
+
+```{r preparar, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                      fig.width = 9, fig.height = 6, dpi = 150)
+
+# O painel grava em entrada.rds as bases JA carregadas e a configuracao da tela,
+# para que o boletim nao refaca download nem reconverta nada.
+entrada <- readRDS("entrada.rds")
+cfg   <- entrada$cfg
+bases <- entrada$bases
+raiz  <- entrada$raiz
+
+for (f in c("funcoes_boletim.R", "fontes_dados.R", "nowcasting.R")) {
+  source(file.path(raiz, "R", f), encoding = "UTF-8")
+}
+library(knitr)
+
+B  <- montar_contexto(bases, cfg)
+I  <- calcular_indicadores(B)
+D  <- calcular_diagrama(B)
+DM <- calcular_diagrama_municipio(B, max_municipios = cfg$diag_max)
+RT <- calcular_rt(B, nivel = cfg$rt_nivel,
+                  locais = if (length(cfg$rt_itens)) cfg$rt_itens else NULL,
+                  virus  = if (length(cfg$rt_virus)) cfg$rt_virus else NULL)
+NC <- if (isTRUE(cfg$semanas_nowcast > 0)) {
+  nowcast_atraso(B$srag_ref, semanas_corrigir = cfg$semanas_nowcast)
+} else NULL
+
+# --- numeracao automatica de figuras e tabelas ------------------------------
+# A legenda e avaliada DEPOIS do codigo do chunk; o resultado fica em cache
+# para que o mesmo chunk nunca consuma dois numeros.
+.num <- new.env(parent = emptyenv())
+.num$fig <- 0L; .num$tab <- 0L; .num$caps <- list()
+
+fig_cap <- function(chave, titulo, n = NULL, periodo = B$rotulo_periodo) {
+  if (!is.null(.num$caps[[chave]])) return(.num$caps[[chave]])
+  .num$fig <- .num$fig + 1L
+  txt <- paste0("Figura ", .num$fig, " - ", titulo, ". ", B$rotulo_territorio, ", ", periodo)
+  if (!is.null(n) && length(n) == 1 && is.finite(n)) txt <- paste0(txt, " (n = ", formatar_n(n), ")")
+  .num$caps[[chave]] <- paste0(txt, ".")
+  .num$caps[[chave]]
+}
+
+tab_cap <- function(titulo, n = NULL) {
+  .num$tab <- .num$tab + 1L
+  txt <- paste0("Tabela ", .num$tab, " - ", titulo, ". ", B$rotulo_territorio, ", ", B$rotulo_periodo)
+  if (!is.null(n) && length(n) == 1 && is.finite(n)) txt <- paste0(txt, " (n = ", formatar_n(n), ")")
+  paste0(txt, ".")
+}
+
+p <- function(texto) if (nzchar(texto)) cat(texto, "
+
+", sep = "")
+```
+
+```{r cabecalho, results='asis'}
+# Título, secretaria, edição, semana epidemiológica e equipe vêm do params.yaml
+# (ou do modal do painel). Campos em branco simplesmente não aparecem.
+cat(cabecalho_boletim(B, cfg), "\n\n", sep = "")
+```
+
+# Visão geral dos casos de SRAG
+
+```{r fig-casos-ano, fig.cap = fig_cap("f1", "Número de casos de SRAG por semana epidemiológica e ano", n = sum(I$casos_ano$casos), periodo = paste0(cfg$ano_hist_ini, " a ", cfg$ano_hist_fim))}
+graf_casos_por_ano(B, I)
+```
+
+```{r txt-ondas, results='asis'}
+p(txt_ondas(B, I))
+```
+
+## Incidência de SRAG no período
+
+```{r fig-incidencia, fig.cap = fig_cap("f2", "Número de casos e incidência de SRAG por 100 mil habitantes, por semana epidemiológica", n = B$total_notificacoes)}
+graf_incidencia(B, I, NC)
+```
+
+```{r tab-resumo, results='asis'}
+print(knitr::kable(tabela_resumo(B, I),
+                   caption = tab_cap("Resumo da situação epidemiológica de SRAG")))
+cat("\n\n")
+p(txt_resumo(B, I))
+```
+
+## Vírus detectados
+
+```{r fig-virus, fig.cap = fig_cap("f3", "Vírus respiratórios detectados por PCR em casos de SRAG", n = B$total_deteccoes)}
+graf_virus_total(B, I)
+```
+
+```{r txt-virus, results='asis'}
+p(txt_virus(B, I))
+```
+
+## Vírus por semana epidemiológica
+
+```{r fig-virus-semana, fig.cap = fig_cap("f4", "Proporção de vírus detectados por PCR, por semana epidemiológica", n = B$total_deteccoes)}
+graf_virus_semana(B, I)
+```
+
+```{r txt-virus-semana, results='asis'}
+p(txt_virus_semana(B, I))
+```
+
+## Vírus por semana epidemiológica e faixa etária
+
+```{r fig-virus-fe, fig.cap = fig_cap("f5", "Casos de SRAG com detecção viral por semana epidemiológica, faixa etária e tipo de vírus", n = sum(I$virus_fe$casos))}
+graf_virus_fe(B, I)
+```
+
+```{r txt-virus-fe, results='asis'}
+p(txt_virus_fe(B, I))
+```
+
+## Hospitalizações por unidade
+
+```{r fig-hospitais, fig.cap = fig_cap("f6", "Casos de SRAG por unidade hospitalar de internação", n = sum(I$hospitais$casos))}
+graf_hospitais(B, I)
+```
+
+```{r txt-hospitais, results='asis'}
+p(txt_hospitais(B, I))
+```
+
+## Faixa etária
+
+```{r fig-faixa, fig.cap = fig_cap("f7", "Casos de SRAG por faixa etária e sexo", n = sum(I$faixa$casos))}
+graf_faixa_etaria(B, I)
+```
+
+```{r txt-faixa, results='asis'}
+p(txt_faixa(B, I))
+```
+
+## Raça/cor
+
+```{r fig-raca, fig.cap = fig_cap("f7b", "Casos de SRAG por raça/cor", n = sum(I$raca$casos))}
+graf_raca_cor(B, I)
+```
+
+```{r txt-raca, results='asis'}
+p(txt_raca(B, I))
+```
+
+## Menores de 2 anos
+
+```{r fig-bebes, fig.cap = fig_cap("f8", "Distribuição dos casos de SRAG com detecção viral em menores de 2 anos, por idade em dias e meses", n = nrow(I$bebes_base))}
+graf_bebes(B, I)
+```
+
+```{r txt-bebes, results='asis'}
+p(txt_bebes(B, I))
+```
+
+### Tipos de vírus identificados em menores de 2 anos
+
+```{r fig-virus-bebes, fig.cap = fig_cap("f9", "Vírus detectados em menores de 2 anos, por idade em dias e meses", n = nrow(I$bebes_base))}
+graf_virus_bebes(B, I)
+```
+
+```{r txt-virus-bebes, results='asis'}
+p(txt_virus_bebes(B, I))
+```
+
+## Suporte ventilatório
+
+```{r fig-ventilacao, fig.cap = fig_cap("f10", "Casos de SRAG segundo uso de suporte ventilatório", n = sum(I$ventilacao$casos))}
+graf_ventilacao(B, I)
+```
+
+```{r txt-ventilacao, results='asis'}
+p(txt_ventilacao(B, I))
+```
+
+## Óbitos
+
+```{r fig-obitos, fig.cap = fig_cap("f11", "Óbitos por SRAG por semana epidemiológica", n = sum(I$obitos_semana$obitos))}
+graf_obitos(B, I)
+```
+
+```{r tab-obitos, results='asis'}
+if (nrow(I$obitos_detalhe) > 0) {
+  print(knitr::kable(
+    I$obitos_detalhe,
+    col.names = c("SE", "Território", "Faixa etária", "Óbitos"),
+    caption = tab_cap("Óbitos por SRAG segundo semana epidemiológica, território e faixa etária",
+                      n = sum(I$obitos_detalhe$obitos)),
+    format = "pandoc", align = "l"
+  ))
+  cat("\n\n")
+}
+p(txt_obitos(B, I))
+```
+
+## Tempo de internação por faixa etária
+
+```{r fig-internacao, fig.cap = fig_cap("f12", "Tempo de internação (em dias) por faixa etária", n = nrow(I$internacao))}
+graf_internacao(B, I)
+```
+
+```{r txt-internacao, results='asis'}
+p(txt_internacao(B, I))
+```
+
+## Evolução dos casos
+
+```{r fig-evolucao, fig.cap = fig_cap("f13", "Casos de SRAG segundo evolução do caso", n = sum(I$evolucao$casos))}
+graf_evolucao(B, I)
+```
+
+```{r txt-evolucao, results='asis'}
+p(txt_evolucao(B, I))
+```
+
+# Diagrama de controle de SRAG
+
+```{r fig-diagrama, fig.cap = fig_cap("f14", "Diagrama de controle da incidência de SRAG por semana epidemiológica")}
+graf_diagrama(B, D)
+```
+
+```{r txt-diagrama, results='asis'}
+p(txt_diagrama(B, D))
+```
+
+## Diagrama de controle por município
+
+```{r fig-diagrama-municipio, fig.width=14, fig.height=10, fig.cap = fig_cap("f15", "Diagrama de controle da incidência de SRAG por semana epidemiológica e município")}
+graf_diagrama_municipio(B, DM, legenda = D$legenda, colunas = cfg$diag_colunas)
+```
+
+```{r tab-zonas, results='asis'}
+zonas <- tabela_zonas_municipio(B, DM)
+
+if (nrow(zonas) == 0) {
+  p(paste0(
+    "A classificação de risco por município não pôde ser calculada: é necessário ter a ",
+    "população de cada território (parâmetro `arquivo_populacao_local` no params.yaml) e ",
+    "pelo menos dois anos de histórico."
+  ))
+} else {
+  print(knitr::kable(
+    zonas, format = "pandoc", align = "l",
+    col.names = c("Território", "Zona de risco", "Incidência corrigida (/100 mil)",
+                  "Tendência", "Nível do plano"),
+    caption = tab_cap("Classificação de risco por território nas últimas semanas analisadas")
+  ))
+  cat("\n\n")
+  p(glue::glue(
+    "A classificação considera as últimas {formatar_n(dplyr::n_distinct(DM$nowcast$SE))} semanas ",
+    "corrigidas por atraso de notificação, comparadas aos limiares históricos de cada território. ",
+    "Recomenda-se ativar, em cada território, o nível correspondente do plano de contingência."
+  ))
+}
+```
+
+# Taxa de transmissibilidade (Rt)
+
+```{r fig-rt, fig.width=13, fig.height=10, fig.cap = fig_cap("f16", paste0("Número de reprodução efetivo (Rt) por ", tolower(rotulo_nivel_rt(cfg$rt_nivel)), " e vírus"))}
+graf_rt(B, RT, cfg$rt_nivel)
+```
+
+```{r tab-rt, results='asis'}
+trt <- tabela_rt(RT, cfg$rt_nivel)
+
+if (nrow(trt) > 0) {
+  print(knitr::kable(trt, format = "pandoc", align = "l",
+                     caption = tab_cap(paste0("Rt mais recente por ", tolower(rotulo_nivel_rt(cfg$rt_nivel)), " e vírus"))))
+  cat("\n\n")
+} else if (!is.null(RT) && nrow(RT) > 0) {
+  p(glue::glue(
+    "Nenhuma série teve ao menos {RT_MIN_CASOS_JAN} casos em uma janela de 7 dias, ",
+    "de modo que não há estimativa de Rt estável para reportar no período."
+  ))
+}
+p(txt_rt(B, RT, cfg$rt_nivel))
+```
+
+# Notas técnicas
+
+```{r notas-tecnicas, results='asis'}
+cat("**Parâmetros utilizados neste boletim** (arquivo `params.yaml`):\n\n")
+
+print(knitr::kable(tibble::tibble(
+  Parâmetro = c(
+    "Modo do período", "Período analisado", "Ano de referência", "Território",
+    "Filtro de município ativo", "Série histórica (figura 1)",
+    "Anos usados nos limiares", "Ano(s) epidêmico(s) excluído(s)",
+    "Semanas corrigidas (nowcasting)", "Fonte dos casos", "Fonte da população"
+  ),
+  Valor = c(
+    cfg$modo_periodo,
+    paste0(format(cfg$periodo_ini, "%d/%m/%Y"), " a ", format(cfg$periodo_fim, "%d/%m/%Y")),
+    as.character(cfg$ano_ref_epi),
+    B$rotulo_territorio,
+    if (cfg$usar_filtro_municipio) "sim" else "não (todos os territórios da UF)",
+    paste0(cfg$ano_hist_ini, " a ", cfg$ano_hist_fim),
+    if (length(D$anos_hist) > 0) listar_e(as.character(D$anos_hist)) else "nenhum",
+    if (length(cfg$ano_epidemico) > 0) listar_e(as.character(cfg$ano_epidemico)) else "nenhum",
+    as.character(cfg$semanas_nowcast),
+    rotulo_fonte(cfg),
+    if (B$tem_populacao) B$fonte_populacao else "não disponível"
+  )
+), format = "pandoc", align = "l"))
+cat("\n\n")
+
+p(glue::glue(
+  "**Cobertura dos dados.** A base contém {formatar_n(B$n_total_base)} registros; ",
+  "{formatar_n(B$n_apos_uf)} após o filtro de UF e {formatar_n(nrow(B$srag))} após o filtro de ",
+  "território. No período do boletim foram analisados {formatar_n(B$total_notificacoes)} casos, ",
+  "com {formatar_n(B$total_deteccoes)} detecções virais por PCR."
+))
+
+p(glue::glue(
+  "**Definições.** A semana epidemiológica e o ano epidemiológico são calculados a partir da data ",
+  "dos primeiros sintomas (`DT_SIN_PRI`) pelo calendário epidemiológico (domingo a sábado). ",
+  "A incidência é expressa por 100 mil habitantes. O diagrama de controle compara a incidência ",
+  "semanal observada com a média histórica da mesma semana epidemiológica, acrescida de ",
+  "{cfg$limiares_dp[1]}, {cfg$limiares_dp[2]} e {cfg$limiares_dp[3]} desvios-padrão."
+))
+
+if (length(B$territorios_sem_pop) > 0) {
+  p(glue::glue(
+    "**Territórios sem população cadastrada:** ",
+    "{listar_e(formatar_nome_territorio(B$territorios_sem_pop))}. ",
+    "Cadastre-os no arquivo indicado em `arquivo_populacao_local` (modelo em ",
+    "`Bancos/POP_LOCAL_MODELO.csv`) para habilitar os indicadores de incidência."
+  ))
+}
+
+if (length(B$avisos) > 0) {
+  cat("**Avisos da geração:**\n\n")
+  for (a in B$avisos) cat("* ", a, "\n", sep = "")
+  cat("\n")
+}
+```

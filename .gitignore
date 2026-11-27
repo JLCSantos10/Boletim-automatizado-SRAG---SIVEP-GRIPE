@@ -1,0 +1,17 @@
+# Sessão do R (podem injetar objetos antigos ao abrir o projeto no RStudio)
+.RData
+.Rhistory
+.Rproj.user/
+
+# Saídas geradas
+BOLETIM_SRAG_*.docx
+*.knit.md
+*_files/
+figure/
+
+# Cache e configuração local do painel (regeráveis)
+Bancos/cache/
+Bancos/preferencias.json
+
+# População preenchida localmente (dado local, não versionado)
+Bancos/POP_LOCAL.csv
